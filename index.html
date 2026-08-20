@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💱 Конвертер Валют и Криптовалют</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0e1117;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #161b22;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        h2 { margin-top: 0; text-align: center; color: #58a6ff; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #c9d1d9; font-size: 14px; }
+        select, input {
+            width: 100%;
+            padding: 12px;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        select:focus, input:focus { border-color: #58a6ff; outline: none; }
+        .row { display: flex; gap: 15px; }
+        .row .form-group { flex: 1; }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #2ea043; }
+        .result {
+            background-color: #1f242c;
+            border-left: 4px solid #238636;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+        .status-box {
+            margin-top: 25px;
+            border-top: 1px solid #30363d;
+            padding-top: 15px;
+        }
+        .status-title { font-size: 14px; color: #8b949e; margin-bottom: 10px; }
+        .status-item {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background-color: #21262d;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>💱 Конвертер Валют</h2>
+    <div class="subtitle">Актуальный рыночный курс (Запросы через ваш браузер)</div>
+
+    <div class="row">
+        <div class="form-group">
+            <label>Из валюты:</label>
+            <select id="fromCurr">
+                <option value="USD" selected>USD</option>
+                <option value="EUR">EUR</option>
+                <option value="RUB">RUB</option>
+                <option value="BYN">BYN</option>
+                <option value="BTC">BTC</option>
+                <option value="ETH">ETH</option>
+                <option value="SOL">SOL</option>
+                <option value="XRP">XRP</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>В валюту:</label>
+            <select id="toCurr">
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="RUB">RUB</option>
+                <option value="BYN">BYN</option>
+                <option value="BTC" selected>BTC</option>
+                <option value="ETH">ETH</option>
+                <option value="SOL">SOL</option>
+                <option value="XRP">XRP</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Введите сумму:</label>
+        <input type="number" id="amount" value="100" min="0" step="any">
+    </div>
+
+    <button onclick="convert()">Конвертировать</button>
+
+    <div id="resultBox" class="result"></div>
+
+    <div class="status-box">
+        <div class="status-title">🔍 Статус соединения с биржам:</div>
+        <div id="fiatStatus" class="status-item">⏳ Загрузка фиатных курсов...</div>
+        <div id="cryptoStatus" class="status-item">⏳ Загрузка курсов крипты...</div>
+    </div>
+</div>
+
+<script>
+    // Резервная база курсов
+    let rates = {
+        "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
+        "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
+    };
+
+    async function loadRates() {
+        // 1. Загрузка фиата через твой браузер (без ключей, открытый шлюз)
+        try {
+            let res = await fetch("https://er-api.com");
+            if (res.ok) {
+                let data = await res.json();
+                rates = { ...rates, ...data.rates };
+                document.getElementById("fiatStatus").innerHTML = "🟢 Фиат: успешно обновлен через браузер";
+                document.getElementById("fiatStatus").style.color = "#3fb950";
+            } else {
+                throw new Error();
+            }
+        } catch(e) {
+            document.getElementById("fiatStatus").innerHTML = "🟡 Фиат: использован встроенный бэкап";
+            document.getElementById("fiatStatus").style.color = "#d29922";
+        }
+
+        // 2. Загрузка крипты напрямую с биржи KuCoin через твой браузер
+        try {
+            let res = await fetch("https://kucoin.com");
+            if (res.ok) {
+                let json = await res.json();
+                let tickers = json.data.ticker;
+                let mapping = { "BTC-USDT": "BTC", "ETH-USDT": "ETH", "SOL-USDT": "SOL", "XRP-USDT": "XRP" };
+                
+                tickers.forEach(item => {
+                    if (mapping[item.symbol]) {
+                        let price = parseFloat(item.last);
+                        if (price > 0) rates[mapping[item.symbol]] = 1 / price;
+                    }
+                });
+                document.getElementById("cryptoStatus").innerHTML = "🟢 Крипта: живые котировки получены от KuCoin";
+                document.getElementById("cryptoStatus").style.color = "#3fb950";
+            } else {
+                throw new Error();
+            }
+        } catch(e) {
+            document.getElementById("cryptoStatus").innerHTML = "🟡 Крипта: использован встроенный бэкап";
+            document.getElementById("cryptoStatus").style.color = "#d29922";
+        }
+    }
+
+    function convert() {
+        let from = document.getElementById("fromCurr").value;
+        let to = document.getElementById("toCurr").value;
+        let amount = parseFloat(document.getElementById("amount").value);
+
+        if (isNaN(amount) || amount < 0) {
+            alert("Пожалуйста, введите корректную сумму");
+            return;
+        }
+
+        let amountInUsd = amount / rates[from];
+        let finalResult = amountInUsd * rates[to];
+
+        let resultBox = document.getElementById("resultBox");
+        resultBox.style.display = "block";
+        resultBox.innerHTML = `${amount.toLocaleString()} ${from} = ${finalResult.toFixed(6)} ${to}`;
+    }
+
+    // Запускаем загрузку курсов при открытии страницы
+    loadRates();
+</script>
+
+</body>
+</html>
