@@ -7,21 +7,26 @@ st.set_page_config(page_title="Crypto & Currency Converter", page_icon="💱", l
 st.title("💱 Конвертер Валют и Криптовалют")
 st.write("Актуальный рыночный курс в реальном времени")
 
-@st.cache_data(ttl=600) # Кэшируем курсы на 10 минут, чтобы сайт работал быстрее
+@st.cache_data(ttl=300) # Кэшируем курсы на 5 минут
 def get_rates():
     try:
-        # Получаем фиатные валюты
+        # Получаем фиатные валюты (базовая валюта USD)
         url = "https://er-api.com"
-        rates = requests.get(url).json()["rates"]
+        response = requests.get(url)
+        rates = response.json()["rates"]
 
-        # Получаем криптовалюты
-        crypto_url = "https://coingecko.com"
-        crypto_data = requests.get(crypto_url).json()
+        # Получаем криптовалюты через альтернативный стабильный источник Cryptonator / CryptoCompare
+        # Используем надежное зеркало без лимитов для BTC, ETH, SOL, XRP
+        crypto_url = "https://cryptocompare.com"
+        crypto_response = requests.get(crypto_url)
+        crypto_data = crypto_response.json()
 
-        rates['BTC'] = 1 / crypto_data['bitcoin']['usd']
-        rates['ETH'] = 1 / crypto_data['ethereum']['usd']
-        rates['SOL'] = 1 / crypto_data['solana']['usd']
-        rates['XRP'] = 1 / crypto_data['ripple']['usd']
+        # Записываем курсы (сколько крипты в 1 долларе)
+        rates['BTC'] = crypto_data['BTC']
+        rates['ETH'] = crypto_data['ETH']
+        rates['SOL'] = crypto_data['SOL']
+        rates['XRP'] = crypto_data['XRP']
+        
         return rates, None
     except Exception as e:
         return None, str(e)
@@ -54,4 +59,4 @@ else:
             st.success(f"### {amount:,.2f} {from_curr} = {result:.6f} {to_curr}")
             
     # Небольшая инфо-панель внизу страницы
-    st.info("💡 Курсы обновляются автоматически. Используются официальные данные CoinGecko и ExchangeRate-API.")
+    st.info("💡 Курсы обновляются автоматически. Используются официальные данные CryptoCompare и ExchangeRate-API.")
