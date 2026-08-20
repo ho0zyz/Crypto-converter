@@ -1,6 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json
 
 st.set_page_config(page_title="Crypto & Currency Converter", page_icon="💱", layout="centered")
 
@@ -19,7 +18,7 @@ fallback_rates = {
 
 clean_key = "".join(user_key.split()) if user_key else ""
 
-# Опережаем блокировки: этот JavaScript код выполнится прямо в твоем браузере на планшете
+# JavaScript код, который выполнится прямо в твоем браузере на планшете
 js_code = f"""
 <script>
 async function fetchAllRates() {{
@@ -69,30 +68,29 @@ async function fetchAllRates() {{
     }}
     
     // Отправляем собранные данные обратно в Python-интерфейс Streamlit
-    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: {{rates: rates, debug: debug}}}}, '*');
+    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: JSON.stringify({{rates: rates, debug: debug}})}}, '*');
 }}
 
-// Запускаем сбор данных сразу после загрузки страницы
+// Запускаем сбор данных
 setTimeout(fetchAllRates, 300);
 </script>
 """
 
-# Невидимый JS-компонент, который поставляет живые данные в Python
+# Невидимый JS-компонент
 receiver = components.html(js_code, height=0, width=0)
 
-# Проверяем, пришли ли данные из браузера
-if st.session_state.get("js_data") is None:
-    # Задаем базовые значения, пока идет секундный запрос в фоне
-    rates = fallback_rates
-    debug_messages = ["⏳ Браузер запрашивает свежие курсы у бирж... Пожалуйста, подождите 1 секунду."]
-else:
-    rates = st.session_state["js_data"]["rates"]
-    debug_messages = st.session_state["js_data"]["debug"]
+# Безопасный разбор данных в Python
+rates = fallback_rates
+debug_messages = ["⏳ Браузер запрашивает свежие курсы у бирж... Пожалуйста, подождите 1 секунду."]
 
-# Механизм сохранения данных из JS в память Streamlit
-if receiver:
-    st.session_state["js_data"] = receiver
-    st.rerun()
+if receiver and isinstance(receiver, str):
+    try:
+        parsed_data = json.loads(receiver)
+        if isinstance(parsed_data, dict) and "rates" in parsed_data:
+            rates = parsed_data["rates"]
+            debug_messages = parsed_data["debug"]
+    except Exception:
+        pass
 
 available_currencies = ["USD", "EUR", "RUB", "BYN", "BTC", "ETH", "SOL", "XRP"]
 
