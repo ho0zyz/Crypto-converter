@@ -6,25 +6,27 @@ st.set_page_config(page_title="Crypto & Currency Converter", page_icon="💱", l
 st.title("💱 Конвертер Валют и Криптовалют")
 st.write("Актуальный рыночный курс в реальном времени")
 
-# Выносим поле ввода ключа прямо в красивый интерфейс сайта (для удобства)
+# Панель для ввода ключа
 with st.sidebar:
     st.header("⚙️ Настройки API")
     user_key = st.text_input("2f82046b08fef551287d936e", type="password", help="Ключ от сайта exchangerate-api.com")
 
 @st.cache_data(ttl=600)
 def get_rates(api_key):
-    # Локальная база (на самый крайний случай)
+    # Локальная база (резерв)
     rates = {
         "USD": 1.0, "EUR": 0.92, "RUB": 91.5, "BYN": 3.26,
         "BTC": 0.000015, "ETH": 0.00038, "SOL": 0.0068, "XRP": 1.72
     }
     debug_info = []
 
-    # 1. Пробуем получить фиатные валюты
-    if api_key and len(api_key).strip() > 5:
-        # Вариант А: Через ваш личный API-ключ
+    # Очищаем ключ от пробелов заранее, если он передан
+    clean_key = api_key.strip() if api_key else ""
+
+    # 1. Получаем фиатные валюты
+    if clean_key and len(clean_key) > 5:
         try:
-            res = requests.get(f"https://exchangerate-api.com{api_key.strip()}/latest/USD", timeout=5)
+            res = requests.get(f"https://exchangerate-api.com{clean_key}/latest/USD", timeout=5)
             if res.status_code == 200:
                 rates.update(res.json().get("conversion_rates", {}))
                 debug_info.append("✅ Фиатные курсы: успешно обновлены через ваш API-ключ.")
@@ -33,7 +35,6 @@ def get_rates(api_key):
         except Exception as e:
             debug_info.append(f"❌ Ошибка подключения к личному API: {str(e)}")
     else:
-        # Вариант Б: Открытый бесплатный шлюз (без ключа), если поле пустое
         try:
             res = requests.get("https://er-api.com", timeout=5)
             if res.status_code == 200:
@@ -44,7 +45,7 @@ def get_rates(api_key):
         except Exception as e:
             debug_info.append(f"❌ Сбой публичного шлюза фиата: {str(e)}")
 
-    # 2. Пробуем получить криптовалюты через CoinCap
+    # 2. Получаем криптовалюты через CoinCap
     try:
         crypto_res = requests.get("https://coincap.io", timeout=5)
         if crypto_res.status_code == 200:
@@ -62,12 +63,12 @@ def get_rates(api_key):
 
     return rates, debug_info
 
-# Загружаем данные на основе ввода
+# Загружаем данные
 rates, debug_messages = get_rates(user_key)
 
 available_currencies = ["USD", "EUR", "RUB", "BYN", "BTC", "ETH", "SOL", "XRP"]
 
-# Основной интерфейс приложения
+# Интерфейс
 with st.container(border=True):
     col1, col2 = st.columns(2)
     with col1:
@@ -82,7 +83,7 @@ with st.container(border=True):
         result = amount_in_usd * rates[to_curr]
         st.success(f"### {amount:,.2f} {from_curr} = {result:.6f} {to_curr}")
 
-# Вывод технического отчета для отслеживания проблемы
+# Технический отчет
 with st.expander("🔍 Технический статус подключения к биржам"):
     for msg in debug_messages:
         st.write(msg)
