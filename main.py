@@ -1,79 +1,99 @@
 import streamlit as st
-import requests
+import streamlit.components.v1 as components
+import json
 
 st.set_page_config(page_title="Crypto & Currency Converter", page_icon="💱", layout="centered")
 
 st.title("💱 Конвертер Валют и Криптовалют")
-st.write("Актуальный рыночный курс в реальном времени")
+st.write("Актуальный рыночный курс в реальном времени (Запросы через ваш браузер)")
 
 with st.sidebar:
     st.header("⚙️ Настройки API")
     user_key = st.text_input("2f82046b08fef551287d936e", type="password")
 
-@st.cache_data(ttl=120)  # Кэш всего на 2 минуты для точности
-def get_rates(api_key):
-    # Локальный бэкап котировок
-    rates = {
-        "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
-        "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
-    }
-    debug_info = []
+# Встроенная база на экстренный случай
+fallback_rates = {
+    "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
+    "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
+}
+
+clean_key = "".join(user_key.split()) if user_key else ""
+
+# Опережаем блокировки: этот JavaScript код выполнится прямо в твоем браузере на планшете
+js_code = f"""
+<script>
+async function fetchAllRates() {{
+    let rates = {{ "USD": 1.0 }};
+    let debug = [];
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    }
+    // 1. Получаем фиатные валюты напрямую в браузере
+    let key = "{clean_key}";
+    let fiatUrl = "https://er-api.com";
+    if (key.length > 10) {{
+        fiatUrl = "https://exchangerate-api.com" + key + "/latest/USD";
+    }}
+    
+    try {{
+        let res = await fetch(fiatUrl);
+        let data = await res.json();
+        let sourceRates = data.conversion_rates || data.rates;
+        if (sourceRates) {{
+            rates = {{...rates, ...sourceRates}};
+            debug.push("✅ Фиат: курсы успешно загружены браузером.");
+        }} else {{
+            debug.push("⚠️ Фиат: некорректный ответ от API.");
+        }}
+    }} catch(e) {{
+        debug.push("❌ Фиат: ошибка сети в браузере " + e.message);
+    }}
+    
+    // 2. Получаем крипту через официальное зеркало Binance
+    try {{
+        let res = await fetch("https://binance.us");
+        let data = await res.json();
+        let cryptoSymbols = {{ "BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL", "XRPUSDT": "XRP" }};
+        
+        if (Array.isArray(data)) {{
+            data.forEach(item => {{
+                if (cryptoSymbols[item.symbol]) {{
+                    let price = parseFloat(item.price);
+                    if (price > 0) {{
+                        rates[cryptoSymbols[item.symbol]] = 1 / price;
+                    }}
+                }}
+            }});
+            debug.push("✅ Крипта: котировки успешно получены от Binance.");
+        }}
+    }} catch(e) {{
+        debug.push("❌ Крипта: Binance заблокирован в браузере " + e.message);
+    }}
+    
+    // Отправляем собранные данные обратно в Python-интерфейс Streamlit
+    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: {{rates: rates, debug: debug}}}}, '*');
+}}
 
-    # Жесткая очистка ключа от пробелов и мусора
-    clean_key = "".join(api_key.split()) if api_key else ""
+// Запускаем сбор данных сразу после загрузки страницы
+setTimeout(fetchAllRates, 300);
+</script>
+"""
 
-    # 1. Запрос мировых валют (Фиат)
-    if clean_key and len(clean_key) > 10:
-        # Исправленный, чистый URL без рисков склеивания строк
-        fiat_url = f"https://exchangerate-api.com{clean_key}/latest/USD"
-        try:
-            res = requests.get(fiat_url, headers=headers, timeout=7)
-            if res.status_code == 200:
-                rates.update(res.json().get("conversion_rates", {}))
-                debug_info.append("✅ Фиатные курсы: успешно обновлены через ваш личный API-ключ.")
-            else:
-                debug_info.append(f"❌ Ошибка личного ключа. Сервер вернул код {res.status_code}.")
-        except Exception as e:
-            debug_info.append(f"❌ Ошибка подключения к личному API: {str(e)}")
-    else:
-        # Если ключа нет, берем открытый глобальный шлюз, защищенный от сбоев json()
-        try:
-            res = requests.get("https://er-api.com", headers=headers, timeout=7)
-            if res.status_code == 200 and "rates" in res.text:
-                rates.update(res.json().get("rates", {}))
-                debug_info.append("✅ Фиатные курсы: обновлены через публичный резервный шлюз.")
-            else:
-                debug_info.append("ℹ️ Фиатные курсы: активирован встроенный стабильный шлюз.")
-        except Exception:
-            debug_info.append("ℹ️ Фиатные курсы: активирован встроенный стабильный шлюз.")
+# Невидимый JS-компонент, который поставляет живые данные в Python
+receiver = components.html(js_code, height=0, width=0)
 
-    # 2. Запрос крипты напрямую через сверхнадежный API Binance
-    crypto_symbols = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL", "XRPUSDT": "XRP"}
-    try:
-        # Binance отдает массив цен для всех пар сразу
-        crypto_res = requests.get("https://binance.com", headers=headers, timeout=7)
-        if crypto_res.status_code == 200:
-            raw_data = crypto_res.json()
-            for item in raw_data:
-                pair = item.get("symbol")
-                if pair in crypto_symbols:
-                    price_usd = float(item.get("price", 0))
-                    if price_usd > 0:
-                        our_ticker = crypto_symbols[pair]
-                        rates[our_ticker] = 1 / price_usd
-            debug_info.append("✅ Криптовалюты: живые биржевые котировки успешно получены от Binance.")
-        else:
-            debug_info.append("ℹ️ Криптовалюты: активирован встроенный стабильный шлюз.")
-    except Exception:
-        debug_info.append("ℹ️ Криптовалюты: активирован встроенный стабильный шлюз.")
+# Проверяем, пришли ли данные из браузера
+if st.session_state.get("js_data") is None:
+    # Задаем базовые значения, пока идет секундный запрос в фоне
+    rates = fallback_rates
+    debug_messages = ["⏳ Браузер запрашивает свежие курсы у бирж... Пожалуйста, подождите 1 секунду."]
+else:
+    rates = st.session_state["js_data"]["rates"]
+    debug_messages = st.session_state["js_data"]["debug"]
 
-    return rates, debug_info
+# Механизм сохранения данных из JS в память Streamlit
+if receiver:
+    st.session_state["js_data"] = receiver
+    st.rerun()
 
-rates, debug_messages = get_rates(user_key)
 available_currencies = ["USD", "EUR", "RUB", "BYN", "BTC", "ETH", "SOL", "XRP"]
 
 with st.container(border=True):
@@ -86,8 +106,8 @@ with st.container(border=True):
     amount = st.number_input("Введите сумму:", min_value=0.0, value=100.0, step=1.0)
     
     if st.button("Конвертировать", type="primary", use_container_width=True):
-        amount_in_usd = amount / rates[from_curr]
-        result = amount_in_usd * rates[to_curr]
+        amount_in_usd = amount / rates.get(from_curr, fallback_rates[from_curr])
+        result = amount_in_usd * rates.get(to_curr, fallback_rates[to_curr])
         st.success(f"### {amount:,.2f} {from_curr} = {result:.6f} {to_curr}")
 
 with st.expander("🔍 Технический статус подключения к биржам"):
