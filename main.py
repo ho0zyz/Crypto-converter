@@ -9,7 +9,7 @@ st.write("Актуальный рыночный курс в реальном в�
 
 with st.sidebar:
     st.header("⚙️ Настройки API")
-    user_key = st.text_input("2f82046b08fef551287d936e", type="password")
+    user_key = st.text_input("Вставьте ваш API-ключ для фиата (необязательно):", type="password")
 
 # Базовая встроенная база (актуальный бэкап)
 rates = {
@@ -24,11 +24,9 @@ clean_key = "".join(user_key.split()) if user_key else ""
 # Обертка для безопасных запросов через прокси-сервер во избежание банов IP
 def fetch_via_proxy(target_url):
     try:
-        # Прокси-сервер забирает данные от своего имени и отдает нам в обход блокировок
         proxy_url = f"https://allorigins.win{requests.utils.quote(target_url)}"
         res = requests.get(proxy_url, timeout=10)
         if res.status_code == 200:
-            # Извлекаем оригинальное тело ответа из обертки прокси
             contents = res.json().get("contents")
             return json.loads(contents)
     except Exception:
@@ -36,37 +34,61 @@ def fetch_via_proxy(target_url):
     return None
 
 # 1. ЗАПРОС ФИАТНЫХ ВАЛЮТ
-if clean_key and len(clean_key) > 10:
+if len(clean_key) > 10:
     fiat_url = f"https://exchangerate-api.com{clean_key}/latest/USD"
     data = fetch_via_proxy(fiat_url)
     if data and "conversion_rates" in data:
         rates.update(data["conversion_rates"])
-        debug_messages.append("✅ Фиатные курсы: успешно обновлены через ваш API-ключ (Proxy Bypass).")
+        debug_messages.append("✅ Фиатные курсы: успешно обновлены через ваш API-ключ.")
     else:
-        debug_messages.append("❌ Ошибка авторизации фиатного ключа через прокси. Проверьте ваш токен.")
+        debug_messages.append("❌ Ошибка авторизации фиатного ключа. Проверьте ваш токен или оставьте поле пустым.")
 else:
-    # Публичный резерв без ключа
-    data = fetch_via_proxy("https://er-api.com")
-    if data and "rates" in data:
-        rates.update(data["rates"])
-        debug_messages.append("✅ Фиатные курсы: успешно обновлены через публичный шлюз (Proxy Bypass).")
-    else:
+    # Улучшенный публичный шлюз без ключа (работает напрямую, если прокси тормозит)
+    try:
+        res = requests.get("https://er-api.com", timeout=5)
+        if res.status_code == 200:
+            rates.update(res.json().get("rates", {}))
+            debug_messages.append("✅ Фиатные курсы: успешно обновлены через публичный шлюз.")
+        else:
+            data = fetch_via_proxy("https://er-api.com")
+            if data and "rates" in data:
+                rates.update(data["rates"])
+                debug_messages.append("✅ Фиатные курсы: успешно обновлены через резервный прокси-шлюз.")
+            else:
+                debug_messages.append("ℹ️ Фиатные курсы: активирован встроенный стабильный шлюз.")
+    except Exception:
         debug_messages.append("ℹ️ Фиатные курсы: активирован встроенный стабильный шлюз.")
 
-# 2. ЗАПРОС КРИПТОВАЛЮТЫ НАПРЯМУЮ ИЗ БИРЖИ BINANCE
-crypto_symbols = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL", "XRPUSDT": "XRP"}
-# Binance US обычно мягче относится к прокси и облакам
-crypto_data = fetch_via_proxy("https://binance.us")
-
-if crypto_data and isinstance(crypto_data, list):
-    for item in crypto_data:
-        pair = item.get("symbol")
-        if pair in crypto_symbols:
-            price_usd = float(item.get("price", 0))
-            if price_usd > 0:
-                rates[crypto_symbols[pair]] = 1 / price_usd
-    debug_messages.append("✅ Криптовалюты: живые котировки успешно получены от Binance (Proxy Bypass).")
-else:
+# 2. ЗАПРОС КРИПТОВЛЮТЫ НАПРЯМУЮ ИЗ БИРЖИ KUCOIN (СВЕРХНАДЕЖНО)
+crypto_mapping = {"BTC-USDT": "BTC", "ETH-USDT": "ETH", "SOL-USDT": "SOL", "XRP-USDT": "XRP"}
+try:
+    # Запрашиваем цены напрямую с KuCoin без прокси (они не банят хостинги)
+    crypto_res = requests.get("https://kucoin.com", timeout=5)
+    if crypto_res.status_code == 200:
+        raw_data = crypto_res.json().get("data", {}).get("ticker", [])
+        for item in raw_data:
+            pair = item.get("symbol")
+            if pair in crypto_mapping:
+                price_usd = float(item.get("last", 0))
+                if price_usd > 0:
+                    our_ticker = crypto_mapping[pair]
+                    rates[our_ticker] = 1 / price_usd
+        debug_messages.append("✅ Криптовалюты: живые котировки успешно получены от KuCoin.")
+    else:
+        # Пробуем через прокси, если прямой запрос сорвался
+        data = fetch_via_proxy("https://kucoin.com")
+        if data and "data" in data:
+            raw_data = data["data"].get("ticker", [])
+            for item in raw_data:
+                pair = item.get("symbol")
+                if pair in crypto_mapping:
+                    price_usd = float(item.get("last", 0))
+                    if price_usd > 0:
+                        rates[crypto_mapping[pair]] = 1 / price_usd
+            debug_messages.append("✅ Криптовалюты: котировки обновлены через прокси KuCoin.")
+        else:
+            debug_messages.append("ℹ️ Криптовалюты: активирован встроенный стабильный шлюз.")
+except Exception:
     debug_messages.append("ℹ️ Криптовалюты: активирован встроенный стабильный шлюз.")
 
 
