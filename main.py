@@ -6,7 +6,7 @@ st.set_page_config(page_title="Crypto & Currency Converter", page_icon="💱", l
 st.title("💱 Конвертер Валют и Криптовалют")
 st.write("Актуальный рыночный курс в реальном времени")
 
-# Локальная база (надежный встроенный бэкап)
+# Базовая встроенная база (резервный бэкап)
 rates = {
     "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
     "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
@@ -16,19 +16,18 @@ headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-# Твой жестко зашитый личный ключ
-api_key = "2f82046b08fef551287d936e"
-
-# 1. ЗАПРОС ФИАТНЫХ ВАЛЮТ
+# 1. ЗАПРОС ФИАТНЫХ ВАЛЮТ (Убрали все переменные и склейки, адрес прописан вручную целиком)
 fiat_status = "⚠️ Сбой сети. Активен встроенный бэкап курсов."
 try:
-    fiat_url = f"https://exchangerate-api.com{api_key}/latest/USD"
+    # Жестко прописанный готовый URL без единого шанса на ошибку склеивания букв
+    fiat_url = "https://exchangerate-api.com"
     res = requests.get(fiat_url, headers=headers, timeout=5)
+    
     if res.status_code == 200 and "conversion_rates" in res.json():
         rates.update(res.json()["conversion_rates"])
         fiat_status = "🟢 ОТЛИЧНО: Живые курсы фиата успешно получены по вашему API-ключу!"
     else:
-        # Резервный публичный запрос
+        # Если ключ заблокирован, пробуем чистый публичный шлюз без ключей
         res_pub = requests.get("https://er-api.com", headers=headers, timeout=5)
         if res_pub.status_code == 200 and "rates" in res_pub.json():
             rates.update(res_pub.json()["rates"])
@@ -40,7 +39,7 @@ except Exception as e:
 crypto_status = "⚠️ Сбой сети. Активен встроенный бэкап крипты."
 crypto_mapping = {"BTC-USDT": "BTC", "ETH-USDT": "ETH", "SOL-USDT": "SOL", "XRP-USDT": "XRP"}
 try:
-    crypto_res = requests.get("https://api.kucoin.com/api/v1/market/allTickers", headers=headers, timeout=5)
+    crypto_res = requests.get("https://kucoin.com", headers=headers, timeout=5)
     if crypto_res.status_code == 200:
         raw_data = crypto_res.json().get("data", {}).get("ticker", [])
         for item in raw_data:
@@ -73,7 +72,7 @@ with st.container(border=True):
         result = amount_in_usd * rates.get(to_curr, 1.0)
         st.success(f"### {amount:,.2f} {from_curr} = {result:.6f} {to_curr}")
 
-# Панель статуса без скрытых логических условий
+# Панель статуса
 st.subheader("🔍 Статус соединения с биржами:")
 st.info(fiat_status)
 st.info(crypto_status)
