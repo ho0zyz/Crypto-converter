@@ -8,62 +8,52 @@ st.write("Актуальный рыночный курс в реальном в�
 
 with st.sidebar:
     st.header("⚙️ Настройки API")
-    user_key = st.text_input("2f82046b08fef551287d936e", type="password")
+    user_key = st.text_input("2f82046b08fef551287d936e", type="password", help="Ваш личный ключ от exchangerate-api.com")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_rates(api_key):
-    # Локальная база (актуализирована на август 2026)
+    # Локальная база (надежный бэкап)
     rates = {
         "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
         "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
     }
     debug_info = []
     
-    # 🕵️‍♂️ Маскируемся под реальный браузер, чтобы обойти блокировки серверов Streamlit
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     clean_key = api_key.strip() if api_key else ""
 
-    # 1. Получаем фиатные валюты
+    # 1. Запрос мировых валют (Фиат)
     if clean_key and len(clean_key) > 5:
         try:
             res = requests.get(f"https://exchangerate-api.com{clean_key}/latest/USD", headers=headers, timeout=5)
             if res.status_code == 200:
                 rates.update(res.json().get("conversion_rates", {}))
-                debug_info.append("✅ Фиатные курсы: успешно обновлены через ваш API-ключ.")
+                debug_info.append("✅ Фиатные курсы: успешно обновлены через ваш личный API-ключ.")
             else:
-                debug_info.append(f"❌ Ошибка личного ключа (Статус {res.status_code}).")
+                debug_info.append(f"❌ Ошибка личного ключа. Сервер вернул код {res.status_code}.")
         except Exception as e:
             debug_info.append(f"❌ Ошибка подключения к личному API: {str(e)}")
     else:
-        try:
-            res = requests.get("https://er-api.com", headers=headers, timeout=5)
-            # Если json() падает из-за блокировки, обрабатываем её безопасно
-            if res.status_code == 200:
-                rates.update(res.json().get("rates", {}))
-                debug_info.append("✅ Фиатные курсы: обновлены через публичный резервный шлюз.")
-            else:
-                debug_info.append(f"❌ Публичный шлюз фиата вернул код {res.status_code}.")
-        except Exception as e:
-            debug_info.append("✅ Фиатные курсы: активирован встроенный стабильный шлюз.")
+        debug_info.append("ℹ️ Фиатные курсы: используется стабильный локальный шлюз (вставьте ключ слева для реалтайма).")
 
-    # 2. Получаем криптовалюты через альтернативное зеркало CoinGecko (без жестких лимитов)
+    # 2. Запрос криптовалют через абсолютно стабильный CoinCap (взамен упавшего CoinGecko)
     try:
-        crypto_res = requests.get("https://coingecko.com", headers=headers, timeout=5)
+        crypto_res = requests.get("https://coincap.io", headers=headers, timeout=5)
         if crypto_res.status_code == 200:
-            crypto_data = crypto_res.json()
-            rates['BTC'] = 1 / crypto_data['bitcoin']['usd']
-            rates['ETH'] = 1 / crypto_data['ethereum']['usd']
-            rates['SOL'] = 1 / crypto_data['solana']['usd']
-            rates['XRP'] = 1 / crypto_data['ripple']['usd']
-            debug_info.append("✅ Криптовалюты: актуальные котировки успешно получены.")
+            data = crypto_res.json().get("data", [])
+            for asset in data:
+                symbol = asset.get("symbol") # BTC, ETH, SOL, XRP
+                price_usd = float(asset.get("priceUsd", 0))
+                if price_usd > 0:
+                    rates[symbol] = 1 / price_usd
+            debug_info.append("✅ Криптовалюты: живые биржевые котировки успешно получены от CoinCap.")
         else:
-            debug_info.append(f"⚠️ CoinGecko ограничил запрос (Код {crypto_res.status_code}). Включен крипто-резерв.")
-    except Exception:
-        debug_info.append("✅ Криптовалюты: активирован встроенный стабильный шлюз.")
+            debug_info.append(f"⚠️ Сервер CoinCap временно занят (Код {crypto_res.status_code}). Включен резерв.")
+    except Exception as e:
+        debug_info.append(f"❌ Сбой сети при запросе крипты: {str(e)}")
 
     return rates, debug_info
 
