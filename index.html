@@ -143,7 +143,7 @@
     </div>
 
     <div class="info-box">
-        💡 Курсы обновляются автоматически. Используются официальные данные CryptoCompare и ExchangeRate-API.
+        💡 Курсы обновляются автоматически. Используются официальные открытые данные биржевых агрегаторов.
     </div>
 
     <div class="status-title">🔍 Статус соединения с биржами:</div>
@@ -158,52 +158,39 @@
         "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
     };
 
-    // 100 LVL БАЙПАС БЛОКИРОВОК КЭША И CORSчерез зашифрованный Heroku/Render шлюз
-    const SERVERLESS_GATEWAY = "https://allorigins.win";
-
     async function loadRates() {
-        // Использование кэш-брейкера (случайного числа в URL), чтобы сервера не отдавали старые ответы
-        const cacheBuster = "&cb=" + Math.random();
-
-        // 1. ЗАПРОС ФИАТА ЧЕРЕЗ СЕРВЕРНЫЙ ПРОКСИ С ВШИТЫМ ТВОИМ ТОКЕНОМ
+        // 1. ФИАТ: Используем CDN-шлюз от GitLab, у которого прописаны CORS-заголовки для всех браузеров
         try {
-            let targetUrl = encodeURIComponent("https://exchangerate-api.com");
-            let res = await fetch(SERVERLESS_GATEWAY + targetUrl + cacheBuster);
-            let json = await res.json();
-            let data = JSON.parse(json.contents);
-            
-            if (data && data.conversion_rates) {
-                rates = { ...rates, ...data.conversion_rates };
-                document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно обновлены в реальном времени.";
-                document.getElementById("fiatStatus").style.color = "#3fb950";
-            } else {
-                throw new Error();
-            }
+            let res = await fetch("https://jsdelivr.net");
+            if (res.ok) {
+                let data = await res.json();
+                if (data && data.usd) {
+                    // Переводим ключи в верхний регистр (usd -> USD)
+                    for (let key in data.usd) {
+                        rates[key.toUpperCase()] = data.usd[key];
+                    }
+                    document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно обновлены в реальном времени.";
+                    document.getElementById("fiatStatus").style.color = "#3fb950";
+                }
+            } else { throw new Error(); }
         } catch(e) {
             document.getElementById("fiatStatus").innerHTML = "🟡 Фиатные курсы: активирован встроенный стабильный шлюз.";
         }
 
-        // 2. ЗАПРОС КРИПТЫ ЧЕРЕЗ АЛЬТЕРНАТИВНУЮ БЕЗОПАСНУЮ ТОЧКУ (ОБХОД BINANCE И KUCOIN)
+        // 2. КРИПТА: Используем открытый шлюз CoinGecko, разработанный под frontend приложения
         try {
-            let targetUrl = encodeURIComponent("https://coincap.io");
-            let res = await fetch(SERVERLESS_GATEWAY + targetUrl + cacheBuster);
-            let json = await res.json();
-            let rawData = JSON.parse(json.contents);
-            
-            if (rawData && rawData.data) {
-                let mapping = { "BTC": "BTC", "ETH": "ETH", "SOL": "SOL", "XRP": "XRP" };
-                rawData.data.forEach(asset => {
-                    let symbol = asset.symbol;
-                    let priceUsd = parseFloat(asset.priceUsd);
-                    if (priceUsd > 0 && mapping[symbol]) {
-                        rates[symbol] = 1 / priceUsd;
-                    }
-                });
-                document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые котировки успешно получены.";
-                document.getElementById("cryptoStatus").style.color = "#3fb950";
-            } else {
-                throw new Error();
-            }
+            let res = await fetch("https://coingecko.com");
+            if (res.ok) {
+                let cryptoData = await res.json();
+                if (cryptoData && cryptoData.bitcoin) {
+                    rates['BTC'] = 1 / cryptoData.bitcoin.usd;
+                    rates['ETH'] = 1 / cryptoData.ethereum.usd;
+                    rates['SOL'] = 1 / cryptoData.solana.usd;
+                    rates['XRP'] = 1 / cryptoData.ripple.usd;
+                    document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые котировки успешно получены.";
+                    document.getElementById("cryptoStatus").style.color = "#3fb950";
+                }
+            } else { throw new Error(); }
         } catch(e) {
             document.getElementById("cryptoStatus").innerHTML = "🟡 Криптовалюты: активирован встроенный стабильный шлюз.";
         }
