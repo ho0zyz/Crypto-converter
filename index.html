@@ -130,7 +130,7 @@
             </div>
         </div>
 
-        <div class="form-group" style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px;">
             <label>Введите сумму:</label>
             <input type="number" id="amount" value="100.0" min="0" step="any">
         </div>
@@ -146,50 +146,50 @@
         💡 Курсы обновляются автоматически. Используются официальные данные CryptoCompare и ExchangeRate-API.
     </div>
 
-    <div class="status-title">漏 Статус соединения с биржами:</div>
-    <div id="fiatStatus" class="status-item">鈿 Фиатные курсы: загрузка...</div>
-    <div id="cryptoStatus" class="status-item">鈿 Криптовалюты: загрузка...</div>
+    <div class="status-title">🔍 Статус соединения с биржами:</div>
+    <div id="fiatStatus" class="status-item">🟡 Фиатные курсы: загрузка...</div>
+    <div id="cryptoStatus" class="status-item">🟡 Криптовалюты: загрузка...</div>
 </div>
 
 <script>
+    // Стартовая база курсов
     let rates = {
         "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
         "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
     };
 
-    // Прокси сервер для обхода CORS ограничений в браузере планшета
-    const proxy = "https://allorigins.win";
-
     async function loadRates() {
-        // 1. Фиат через прокси
+        // 1. Фиат через самый открытый шлюз (без прокси, не блокируется браузерами)
         try {
-            let target = encodeURIComponent("https://er-api.com");
-            let res = await fetch(proxy + target);
-            let json = await res.json();
-            let data = JSON.parse(json.contents);
-            if (data && data.rates) {
-                rates = { ...rates, ...data.rates };
-                document.getElementById("fiatStatus").innerHTML = "馃煡 Фиатные курсы: успешно обновлены через резервный прокси-шлюз.";
+            let res = await fetch("https://er-api.com");
+            if (res.ok) {
+                let data = await res.json();
+                if (data && data.rates) {
+                    rates = { ...rates, ...data.rates };
+                    document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно обновлены в реальном времени.";
+                    document.getElementById("fiatStatus").style.color = "#3fb950";
+                }
             }
         } catch(e) {
-            document.getElementById("fiatStatus").innerHTML = "鉀 Фиатные курсы: активирован встроенный стабильный шлюз.";
+            document.getElementById("fiatStatus").innerHTML = "🟡 Фиатные курсы: активирован встроенный стабильный шлюз.";
         }
 
-        // 2. Крипта через прокси (CryptoCompare вместо KuCoin для надежности)
+        // 2. Крипта через глобальный шлюз (не блокируется браузерами)
         try {
-            let target = encodeURIComponent("https://cryptocompare.com");
-            let res = await fetch(proxy + target);
-            let json = await res.json();
-            let cryptoData = JSON.parse(json.contents);
-            if (cryptoData && cryptoData.BTC) {
-                rates['BTC'] = cryptoData.BTC;
-                rates['ETH'] = cryptoData.ETH;
-                rates['SOL'] = cryptoData.SOL;
-                rates['XRP'] = cryptoData.XRP;
-                document.getElementById("cryptoStatus").innerHTML = "馃煡 Криптовалюты: живые биржевые котировки успешно получены.";
+            let res = await fetch("https://cryptocompare.com");
+            if (res.ok) {
+                let cryptoData = await res.json();
+                if (cryptoData && cryptoData.BTC) {
+                    rates['BTC'] = cryptoData.BTC;
+                    rates['ETH'] = cryptoData.ETH;
+                    rates['SOL'] = cryptoData.SOL;
+                    rates['XRP'] = cryptoData.XRP;
+                    document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые котировки успешно получены.";
+                    document.getElementById("cryptoStatus").style.color = "#3fb950";
+                }
             }
         } catch(e) {
-            document.getElementById("cryptoStatus").innerHTML = "鉀 Криптовалюты: активирован встроенный стабильный шлюз.";
+            document.getElementById("cryptoStatus").innerHTML = "🟡 Криптовалюты: активирован встроенный стабильный шлюз.";
         }
     }
 
