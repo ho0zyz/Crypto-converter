@@ -143,24 +143,20 @@
     </div>
 
     <div class="info-box">
-        💡 Курсы обновляются автоматически. Используются официальные открытые данные биржевых агрегаторов.
+        💡 Курсы обновляются автоматически напрямую с биржевых агрегаторов.
     </div>
 
     <div class="status-title">🔍 Статус соединения с биржами:</div>
-    <div id="fiatStatus" class="status-item">🟡 Фиатные курсы: загрузка...</div>
-    <div id="cryptoStatus" class="status-item">🟡 Криптовалюты: загрузка...</div>
+    <div id="fiatStatus" class="status-item" style="color: #d29922;">🟡 Фиатные курсы: загрузка...</div>
+    <div id="cryptoStatus" class="status-item" style="color: #d29922;">🟡 Криптовалюты: загрузка...</div>
 </div>
 
 <script>
-    // Жесткий бэкап
-    let rates = {
-        "USD": 1.0, "EUR": 0.93, "RUB": 94.2, "BYN": 3.28,
-        "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
-    };
+    // Инициализируем только базовый доллар, никаких бэкапов цен больше нет
+    let rates = { "USD": 1.0 };
 
     async function loadFiat() {
         try {
-            // Используем надежный фиатный шлюз с полной CORS-поддержкой
             let res = await fetch("https://er-api.com");
             if (res.ok) {
                 let data = await res.json();
@@ -173,16 +169,16 @@
                     return;
                 }
             }
-            throw new Error();
+            throw new Error("Сервер вернул некорректный статус " + res.status);
         } catch(e) {
-            document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно активирован стабильный шлюз.";
-            document.getElementById("fiatStatus").style.color = "#3fb950";
+            document.getElementById("fiatStatus").innerHTML = "🔴 Фиат: ошибка запроса. " + e.message;
+            document.getElementById("fiatStatus").style.color = "#f85149";
         }
     }
 
     async function loadCrypto() {
         try {
-            // Запрашиваем отношение USD ко всем нужным коинам напрямую с CryptoCompare
+            // Прямой запрос к CryptoCompare
             let res = await fetch("https://cryptocompare.com");
             if (res.ok) {
                 let cryptoData = await res.json();
@@ -196,10 +192,10 @@
                     return;
                 }
             }
-            throw new Error();
+            throw new Error("Сервер CryptoCompare недоступен.");
         } catch(e) {
-            document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: успешно активирован стабильный шлюз.";
-            document.getElementById("cryptoStatus").style.color = "#3fb950";
+            document.getElementById("cryptoStatus").innerHTML = "🔴 Крипта: ошибка запроса. " + e.message;
+            document.getElementById("cryptoStatus").style.color = "#f85149";
         }
     }
 
@@ -209,6 +205,11 @@
         let amount = parseFloat(document.getElementById("amount").value);
 
         if (isNaN(amount) || amount < 0) return;
+        
+        if (!rates[from] || !rates[to]) {
+            alert("Ошибка: Курсы валют еще не загружены с биржи!");
+            return;
+        }
 
         let amountInUsd = amount / rates[from];
         let finalResult = amountInUsd * rates[to];
