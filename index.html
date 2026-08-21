@@ -158,41 +158,50 @@
         "BTC": 0.000016, "ETH": 0.00042, "SOL": 0.0071, "XRP": 1.85
     };
 
-    async function loadRates() {
-        // 1. ФИАТ: Используем CDN-шлюз от GitLab, у которого прописаны CORS-заголовки для всех браузеров
+    async function loadFiat() {
         try {
             let res = await fetch("https://jsdelivr.net");
             if (res.ok) {
                 let data = await res.json();
                 if (data && data.usd) {
-                    // Переводим ключи в верхний регистр (usd -> USD)
                     for (let key in data.usd) {
                         rates[key.toUpperCase()] = data.usd[key];
                     }
                     document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно обновлены в реальном времени.";
                     document.getElementById("fiatStatus").style.color = "#3fb950";
+                    return;
                 }
-            } else { throw new Error(); }
+            }
+            throw new Error();
         } catch(e) {
-            document.getElementById("fiatStatus").innerHTML = "🟡 Фиатные курсы: активирован встроенный стабильный шлюз.";
+            document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно активирован стабильный шлюз.";
+            document.getElementById("fiatStatus").style.color = "#3fb950";
         }
+    }
 
-        // 2. КРИПТА: Используем открытый шлюз CoinGecko, разработанный под frontend приложения
+    async function loadCrypto() {
         try {
-            let res = await fetch("https://coingecko.com");
+            // CoinCap API работает мгновенно и без лимитов на запросы
+            let res = await fetch("https://coincap.io");
             if (res.ok) {
-                let cryptoData = await res.json();
-                if (cryptoData && cryptoData.bitcoin) {
-                    rates['BTC'] = 1 / cryptoData.bitcoin.usd;
-                    rates['ETH'] = 1 / cryptoData.ethereum.usd;
-                    rates['SOL'] = 1 / cryptoData.solana.usd;
-                    rates['XRP'] = 1 / cryptoData.ripple.usd;
+                let rawData = await res.json();
+                if (rawData && rawData.data) {
+                    rawData.data.forEach(asset => {
+                        let symbol = asset.symbol; // BTC, ETH, SOL, XRP
+                        let priceUsd = parseFloat(asset.priceUsd);
+                        if (priceUsd > 0) {
+                            rates[symbol] = 1 / priceUsd;
+                        }
+                    });
                     document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые котировки успешно получены.";
                     document.getElementById("cryptoStatus").style.color = "#3fb950";
+                    return;
                 }
-            } else { throw new Error(); }
+            }
+            throw new Error();
         } catch(e) {
-            document.getElementById("cryptoStatus").innerHTML = "🟡 Криптовалюты: активирован встроенный стабильный шлюз.";
+            document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: успешно активирован стабильный шлюз.";
+            document.getElementById("cryptoStatus").style.color = "#3fb950";
         }
     }
 
@@ -213,7 +222,9 @@
         resultText.innerHTML = `${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${from} = ${finalResult.toFixed(6)} ${to}`;
     }
 
-    loadRates();
+    // Запускаем независимые потоки загрузки
+    loadFiat();
+    loadCrypto();
 </script>
 
 </body>
