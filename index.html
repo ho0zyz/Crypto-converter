@@ -160,12 +160,13 @@
 
     async function loadFiat() {
         try {
-            let res = await fetch("https://jsdelivr.net");
+            // Используем надежный фиатный шлюз с полной CORS-поддержкой
+            let res = await fetch("https://er-api.com");
             if (res.ok) {
                 let data = await res.json();
-                if (data && data.usd) {
-                    for (let key in data.usd) {
-                        rates[key.toUpperCase()] = data.usd[key];
+                if (data && data.rates) {
+                    for (let key in data.rates) {
+                        rates[key.toUpperCase()] = data.rates[key];
                     }
                     document.getElementById("fiatStatus").innerHTML = "🟢 Фиатные курсы: успешно обновлены в реальном времени.";
                     document.getElementById("fiatStatus").style.color = "#3fb950";
@@ -181,19 +182,16 @@
 
     async function loadCrypto() {
         try {
-            // CoinCap API работает мгновенно и без лимитов на запросы
-            let res = await fetch("https://coincap.io");
+            // Запрашиваем отношение USD ко всем нужным коинам напрямую с CryptoCompare
+            let res = await fetch("https://cryptocompare.com");
             if (res.ok) {
-                let rawData = await res.json();
-                if (rawData && rawData.data) {
-                    rawData.data.forEach(asset => {
-                        let symbol = asset.symbol; // BTC, ETH, SOL, XRP
-                        let priceUsd = parseFloat(asset.priceUsd);
-                        if (priceUsd > 0) {
-                            rates[symbol] = 1 / priceUsd;
-                        }
-                    });
-                    document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые котировки успешно получены.";
+                let cryptoData = await res.json();
+                if (cryptoData && cryptoData.BTC) {
+                    rates['BTC'] = cryptoData.BTC;
+                    rates['ETH'] = cryptoData.ETH;
+                    rates['SOL'] = cryptoData.SOL;
+                    rates['XRP'] = cryptoData.XRP;
+                    document.getElementById("cryptoStatus").innerHTML = "🟢 Криптовалюты: живые биржевые котировки успешно получены.";
                     document.getElementById("cryptoStatus").style.color = "#3fb950";
                     return;
                 }
@@ -222,7 +220,6 @@
         resultText.innerHTML = `${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${from} = ${finalResult.toFixed(6)} ${to}`;
     }
 
-    // Запускаем независимые потоки загрузки
     loadFiat();
     loadCrypto();
 </script>
